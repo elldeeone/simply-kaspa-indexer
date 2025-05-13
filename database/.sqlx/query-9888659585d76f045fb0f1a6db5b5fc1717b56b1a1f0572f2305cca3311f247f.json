@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT previous_outpoint_script\n            FROM transactions_inputs\n            WHERE transaction_id = $1 AND index = 0\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "previous_outpoint_script",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "9888659585d76f045fb0f1a6db5b5fc1717b56b1a1f0572f2305cca3311f247f"
+}

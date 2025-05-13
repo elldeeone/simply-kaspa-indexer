@@ -11,6 +11,7 @@ use crate::models::transaction_acceptance::TransactionAcceptance;
 use crate::models::transaction_input::TransactionInput;
 use crate::models::transaction_output::TransactionOutput;
 use crate::models::types::hash::Hash;
+use crate::client::Payload;
 
 pub async fn insert_subnetwork(subnetwork_id: &String, pool: &Pool<Postgres>) -> Result<i32, Error> {
     sqlx::query("INSERT INTO subnetworks (subnetwork_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id")
@@ -260,6 +261,31 @@ pub async fn insert_transaction_acceptances(tx_acceptances: &[TransactionAccepta
         query = query.bind(&ta.block_hash);
     }
     Ok(query.execute(pool).await?.rows_affected())
+}
+
+/// Inserts a single Payload record.
+pub async fn insert_payload(payload: &Payload, pool: &Pool<Postgres>) -> Result<u64, Error> {
+    const SQL: &str = "
+    INSERT INTO payloads (
+        transaction_id, block_hash, block_time, block_daa_score, version, contract_type_id, sender_address, raw_payload
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    ON CONFLICT (transaction_id) DO NOTHING";
+
+    let rows_affected = sqlx::query(SQL)
+        .bind(&payload.transaction_id)
+        .bind(&payload.block_hash)
+        .bind(payload.block_time)
+        .bind(payload.block_daa_score as i64)
+        .bind(payload.version)
+        .bind(payload.contract_type_id)
+        .bind(&payload.sender_address)
+        .bind(&payload.raw_payload)
+        .execute(pool)
+        .await?
+        .rows_affected();
+
+    Ok(rows_affected)
 }
 
 fn generate_placeholders(rows: usize, columns: usize) -> String {

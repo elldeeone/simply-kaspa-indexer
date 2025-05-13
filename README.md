@@ -22,6 +22,50 @@ See --help for a list of optional fields.
 In addition to optional tables, many fields can be left empty if they are not required for your use case.  
 Use exclude-fields arguments to fine tune. See --help for a list of optional fields.
 
+### Contract Payload Indexing
+The indexer includes a feature to capture and store transaction payloads that conform to the contract envelope format. This involves identifying payloads starting with the 2-byte hex magic number `0xC0DE` (in little-endian format: `DE C0`), parsing a subsequent version byte (must be `0x01`) and a 3-byte big-endian contract type ID.
+
+These payloads, along with the derived sender address, are stored in a dedicated `payloads` table with the following schema:
+```sql
+CREATE TABLE payloads (
+    transaction_id BYTEA PRIMARY KEY,
+    block_hash BYTEA NOT NULL,
+    block_time BIGINT NOT NULL,
+    block_daa_score BIGINT NOT NULL,
+    version SMALLINT NOT NULL,
+    contract_type_id INTEGER NOT NULL,
+    sender_address TEXT NULL, -- Kaspa address derived from the first transaction input
+    raw_payload BYTEA NOT NULL -- bytes after the 6-byte header
+);
+
+CREATE INDEX payloads_block_daa_score_idx ON payloads (block_daa_score);
+CREATE INDEX payloads_contract_type_id_idx ON payloads (contract_type_id);
+```
+To use this feature:
+1. Ensure `tx_payload` is NOT included in the `--exclude-fields` argument when running the indexer.
+2. **Crucially, the `--enable=transactions_inputs_resolve` flag must be used.** This feature relies on the resolved input data to derive the sender address.
+3. The feature is always active when compiled in.
+4. Payloads are automatically detected, parsed, validated, and stored when they match the magic number and structure. The sender address is derived from the scriptPublicKey of the first input (index 0).
+5. Invalid contract payloads (wrong magic number, too short, unsupported version) are logged and skipped. Sender address derivation might fail for non-standard script types or if input data is unavailable (e.g., coinbase), resulting in a `NULL` value for `sender_address`.
+
+**Note on Database Setup:**
+- For *new* database initializations, the `payloads` table will be created automatically by the indexer.
+- If you are running the indexer against an *existing* database that was created before this feature was added, you will need to manually create the `payloads` table using the `CREATE TABLE` statement above before starting the indexer.
+
+### Binary Contract Envelope Format
+The contract envelope format has the following binary structure:
+
+```
+| Magic (0xC0DE, 2B) | Version (0x01, 1B) | ContractTypeID (3B) | Payload |
+```
+
+- **Magic Number**: `0xC0DE` (2 bytes, little-endian: `DE C0`) - Identifies the data as a contract payload
+- **Version**: `0x01` (1 byte) - Protocol version, currently fixed at 1
+- **Contract Type ID**: (3 bytes, big-endian) - Fixed 3-byte unsigned integer (0-16777215)
+- **Payload**: (variable length) - Typically JSON data extending to the end of the OP_RETURN data
+
+The total envelope overhead is exactly 6 bytes (2B magic + 1B version + 3B type ID).
+
 ### Index by script instead of address
 If addresses_transactions_table is NOT disabled and exclude-fields contains tx_out_script_public_key_address (and not tx_out_script_public_key),  
 the indexer will use scripts_transactions instead of addresses_transactions for indexing addresses for > 25% space savings.

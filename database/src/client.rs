@@ -21,6 +21,42 @@ use crate::models::transaction_output::TransactionOutput;
 use crate::models::types::hash::Hash;
 use crate::query;
 
+/// Represents a transaction payload conforming to the contract payload layout
+/// This struct is used to store parsed payloads in the payloads table
+#[derive(Clone, Debug)]
+pub struct Payload {
+    /// The transaction ID that contains this payload
+    pub transaction_id: Vec<u8>, // BYTEA PRIMARY KEY
+    /// The block hash that contains this transaction
+    pub block_hash: Vec<u8>, // BYTEA NOT NULL
+    /// The block timestamp when this transaction was included
+    pub block_time: i64, // BIGINT NOT NULL
+    /// The DAA score of the block containing the transaction
+    pub block_daa_score: u64, // BIGINT NOT NULL
+    /// The contract envelope version (e.g., 0x01)
+    pub version: i16, // SMALLINT NOT NULL
+    /// The parsed Contract Type ID from the 3-byte big-endian value
+    pub contract_type_id: i32, // INTEGER NOT NULL
+    /// The Kaspa address of the sender (first input)
+    pub sender_address: Option<String>, // TEXT NULL
+    /// The full payload data as raw bytes
+    pub raw_payload: Vec<u8>, // BYTEA NOT NULL
+}
+
+const CREATE_PAYLOADS_TABLE: &str = "
+CREATE TABLE IF NOT EXISTS payloads (
+    transaction_id   BYTEA       PRIMARY KEY,  -- raw txid bytes
+    block_hash       BYTEA       NOT NULL,     -- hash of the accepting chain block
+    block_time       BIGINT      NOT NULL,     -- block.DAA_score timestamp
+    block_daa_score  BIGINT      NOT NULL,     -- block's DAA score
+    version          SMALLINT    NOT NULL,     -- envelope version
+    contract_type_id INTEGER     NOT NULL,     -- 24-bit ID
+    sender_address   TEXT        NULL,         -- Kaspa address from first input
+    raw_payload      BYTEA       NOT NULL      -- bytes after the 6-byte header
+);
+CREATE INDEX IF NOT EXISTS payloads_block_daa_score_idx ON payloads (block_daa_score);
+CREATE INDEX IF NOT EXISTS payloads_contract_type_id_idx ON payloads (contract_type_id);";
+
 #[derive(Clone)]
 pub struct KaspaDbClient {
     pool: Pool<Postgres>,
@@ -160,8 +196,14 @@ impl KaspaDbClient {
                 query::misc::execute_ddl(include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/migrations/schema/up.sql")), &self.pool)
                     .await?;
                 info!("\x1b[32mSchema applied successfully\x1b[0m");
+                // Ensure payloads table exists even on initial setup
+                debug!("Ensuring payloads table exists...");
+                query::misc::execute_ddl(CREATE_PAYLOADS_TABLE, &self.pool).await?;
             }
         };
+        // Ensure payloads table exists after potential migrations or initial setup
+        debug!("Ensuring payloads table exists...");
+        query::misc::execute_ddl(CREATE_PAYLOADS_TABLE, &self.pool).await?;
         Ok(())
     }
 
@@ -243,6 +285,33 @@ impl KaspaDbClient {
 
     pub async fn insert_transaction_acceptances(&self, transaction_acceptances: &[TransactionAcceptance]) -> Result<u64, Error> {
         query::insert::insert_transaction_acceptances(transaction_acceptances, &self.pool).await
+    }
+
+    pub async fn insert_payload(&self, payload: &Payload) -> Result<u64, Error> {
+        query::insert::insert_payload(payload, &self.pool).await
+    }
+
+    /// Fetches the script pub key for the first input (index 0) of a transaction.
+    /// Queries the `transactions_inputs` table. The `previous_outpoint_script` column
+    /// must be populated, requiring the `--enable=transactions_inputs_resolve` indexer flag.
+    /// Returns `Ok(None)` if the transaction or its first input is not found (e.g., coinbase tx).
+    pub async fn get_transaction_input_script(&self, transaction_id_bytes: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+        trace!("Querying input script for tx_id (bytes): {:?}", transaction_id_bytes);
+        // Assumes index 0 is the first input. Filter by index = 0.
+        // Fetches the 'previous_outpoint_script' which holds the script bytes.
+        let result = sqlx::query!(
+            r#"
+            SELECT previous_outpoint_script
+            FROM transactions_inputs
+            WHERE transaction_id = $1 AND index = 0
+            "#,
+            transaction_id_bytes // Use bytes directly for bytea comparison
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        // Extract the optional script bytes from the optional row result
+        Ok(result.and_then(|row| row.previous_outpoint_script))
     }
 
     pub async fn upsert_var(&self, key: &str, value: &String) -> Result<u64, Error> {

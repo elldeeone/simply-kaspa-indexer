@@ -12,7 +12,7 @@ default = []
 [dependencies]
 simply-kaspa-cli.workspace = true
 simply-kaspa-kaspad.workspace = true
-simply-kaspa-database.workspace = true
+simply-kaspa-database = { path = "../database" }
 simply-kaspa-mapping.workspace = true
 kaspa-wrpc-client.workspace = true
 kaspa-rpc-core.workspace = true
@@ -47,4 +47,10 @@ bytesize.workspace = true
 humantime.workspace = true
 url.workspace = true
 rand.workspace = true
+unsigned-varint = { version = "0.8", features = ["codec"] }
 uuid = { version = "1.12.1", features = ["v4"] }
+leb128 = "0.2.5"
+rayon = "1.10.0"
+borsh.workspace = true
+
+[build-dependencies]
