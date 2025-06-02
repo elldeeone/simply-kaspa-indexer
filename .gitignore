@@ -2,3 +2,5 @@
 *.iml
 target/
 docker-compose.yaml
+docs/
+.cursor/

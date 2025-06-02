@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS payloads;
 DROP TABLE IF EXISTS scripts_transactions;
 DROP TABLE IF EXISTS addresses_transactions;
 DROP TABLE IF EXISTS transactions_inputs;

@@ -11,6 +11,7 @@ use crate::models::transaction_acceptance::TransactionAcceptance;
 use crate::models::transaction_input::TransactionInput;
 use crate::models::transaction_output::TransactionOutput;
 use crate::models::types::hash::Hash;
+use crate::models::payload::Payload;
 
 pub async fn insert_subnetwork(subnetwork_id: &String, pool: &Pool<Postgres>) -> Result<i32, Error> {
     sqlx::query("INSERT INTO subnetworks (subnetwork_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id")
@@ -258,6 +259,27 @@ pub async fn insert_transaction_acceptances(tx_acceptances: &[TransactionAccepta
     for ta in tx_acceptances {
         query = query.bind(&ta.transaction_id);
         query = query.bind(&ta.block_hash);
+    }
+    Ok(query.execute(pool).await?.rows_affected())
+}
+
+pub async fn insert_payloads(payloads: &[Payload], pool: &Pool<Postgres>) -> Result<u64, Error> {
+    const COLS: usize = 8;
+    let sql = format!(
+        "INSERT INTO payloads (transaction_id, block_hash, block_time, block_daa_score, version, contract_type_id, sender_address, raw_payload)
+        VALUES {} ON CONFLICT DO NOTHING",
+        generate_placeholders(payloads.len(), COLS)
+    );
+    let mut query = sqlx::query(&sql);
+    for p in payloads {
+        query = query.bind(&p.transaction_id);
+        query = query.bind(&p.block_hash);
+        query = query.bind(p.block_time);
+        query = query.bind(p.block_daa_score);
+        query = query.bind(p.version);
+        query = query.bind(p.contract_type_id);
+        query = query.bind(&p.sender_address);
+        query = query.bind(&p.raw_payload);
     }
     Ok(query.execute(pool).await?.rows_affected())
 }

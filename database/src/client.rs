@@ -18,6 +18,7 @@ use crate::models::transaction_acceptance::TransactionAcceptance;
 use crate::models::transaction_input::TransactionInput;
 use crate::models::transaction_output::TransactionOutput;
 use crate::models::types::hash::Hash;
+use crate::models::payload::Payload;
 use crate::query;
 
 #[derive(Clone)]
@@ -249,6 +250,10 @@ impl KaspaDbClient {
 
     pub async fn insert_block_transactions(&self, block_transactions: &[BlockTransaction]) -> Result<u64, Error> {
         query::insert::insert_block_transactions(block_transactions, &self.pool).await
+    }
+
+    pub async fn insert_payloads(&self, payloads: &[Payload]) -> Result<u64, Error> {
+        query::insert::insert_payloads(payloads, &self.pool).await
     }
 
     pub async fn insert_transaction_acceptances(&self, transaction_acceptances: &[TransactionAcceptance]) -> Result<u64, Error> {

@@ -121,3 +121,17 @@ CREATE TABLE scripts_transactions
     PRIMARY KEY (script_public_key, transaction_id)
 );
 CREATE INDEX ON scripts_transactions (script_public_key, block_time DESC);
+
+CREATE TABLE IF NOT EXISTS payloads (
+    transaction_id BYTEA PRIMARY KEY,
+    block_hash BYTEA NOT NULL,
+    block_time BIGINT NOT NULL,
+    block_daa_score BIGINT NOT NULL,
+    version SMALLINT NOT NULL,
+    contract_type_id INTEGER NOT NULL,
+    sender_address TEXT NULL,
+    raw_payload BYTEA NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS payloads_block_daa_score_idx ON payloads (block_daa_score);
+CREATE INDEX IF NOT EXISTS payloads_contract_type_id_idx ON payloads (contract_type_id);
